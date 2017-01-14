@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>My Awesome Presentation</title>
+    <meta http-equiv="Content-Type" content="text/html; charset=UTF-8"/>
+    <style type="text/css">
+      @import url(https://fonts.googleapis.com/css?family=Yanone+Kaffeesatz);
+      @import url(https://fonts.googleapis.com/css?family=Droid+Serif:400,700,400italic);
+      @import url(https://fonts.googleapis.com/css?family=Ubuntu+Mono:400,700,400italic);
+
+      body { font-family: 'Droid Serif'; }
+      h1, h2, h3 {
+        font-family: 'Yanone Kaffeesatz';
+        font-weight: normal;
+      }
+      .remark-code, .remark-inline-code { font-family: 'Ubuntu Mono'; }
+    </style>
+    <script>
+      document.write('<script src="http://' + (location.host || 'localhost').split(':')[0] + ':35729/livereload.js?snipver=1"></' + 'script>');
+    </script>
+    <!-- If this isn't working, see https://github.com/gnab/remark -->
+    <script src="https://gnab.github.io/remark/downloads/remark-latest.min.js" type="text/javascript">
+    </script>
+  </head>
+  <body onload="var slideshow = remark.create({highlightStyle: 'monokai'});">
+    <textarea id="source">
+
+# TODOs
+
+* Cargo / crates.io
+
+* Strong static typing
+
+* C memory layout, easy FFI
+
+* Imperative, C-like syntax
+    * But expression-oriented & uses lambdas heavily
+
+* Structs with trait based inheritance (no OOP)
+
+* Aimed at systems programming
+    * Control over heap vs stack allocation
+    
+    * No automatic garbage collection
+
+    * Fast
+
+* Native threads, strings stored as UTF-8
+
+* Backed by Mozilla
+
+* Get into Rayon
+
+---
+
+
+class: center, middle
+
+# An introduction to Rust
+
+&nbsp;
+
+### "Technology from the past come 
+### to save the future from itself"
+
+---
+
+# Agenda
+
+1. What is Rust?
+    * Rust vs C++
+2. Rust's killer features
+3. Parallelism in Rust
+
+---
+
+# Origin story
+
+* 2006 - 2010: Mozilla employee side project
+
+--
+
+    * "I have been writing a compiled, concurrent,
+safe, systems programming language for the
+past four and a half years."
+
+    * "Spare-time kinda thing. Yeah, I got problems."
+
+--
+
+* 2010 - 2015: Mozilla-sponsored community-driven development
+
+    * "Many older languages better than newer ones"
+
+    * "We keep forgetting already-learned lessons"
+
+    * Rust has lost more features than most languages ever gain
+
+--
+
+* May 2015: Stable 1.0 public release
+
+     * Already in production at Dropbox, Chef, NPM, Xero
+
+???
+
+mozilla employee = Graydon Hoare, who then became BFDL
+
+Initial Graydon presentation: http://venge.net/graydon/talks/intro-talk-2.pdf
+
+Graydon steps down for personal reasons in Aug 2013: https://www.reddit.com/r/rust/comments/1lfoaz/graydon_hoare_steps_down_as_technical_lead_on_rust/ and https://mail.mozilla.org/pipermail/rust-dev/2013-August/005426.html
+
+Rust is explicitly not a language to perform programming research in - it's a better C++. But what makes a better C++ wasn't clear
+
+Older languages such as Mesa (1977), BETA (1975), CLU (1974)
+
+Of course mozilla is a production user too.
+
+Sample of Rust production users: https://www.rust-lang.org/en-US/friends.html
+
+---
+
+# "Why Oh Why? #1" (from 2010)
+
+* C++ is well past expiration date:
+
+    * Wildly unsafe in almost every way
+
+        * Memory unsafe, no ownership policies, no concurrent control at all, can't even keep const values constant.
+
+    * Heavily burdened with legacy issues
+
+        * Absurd compilation model, weak linkage and module system, nigh impossible to write tools for.
+
+    * Spend more time fighting its weaknesses than seems reasonable.
+        * Maybe you've noticed?
+
+???
+
+Original motivation for Rust as described by Graydon to Mozilla employees working on Firefox.
+
+Transcribed from slides at http://venge.net/graydon/talks/intro-talk-2.pdf
+
+---
+
+# "Why Oh Why? #2" (from 2010)
+
+* Most newer languages are unsuitable. One or more of:
+
+    * JVM/CLR or similar tie-in, VM/FFI burden
+
+    * Complex GC + pointer-heavy = poor memory use
+
+    * "Different paradigm" (hard to find talent for, comprehension barrier, unpredictable)
+
+    * "Script language" (few types or static checks)
+
+    * Mostly ignore isolation, interference, concurrency
+
+???
+
+
+
+---
+
+## A code sample
+
+```rust
+fn parse_boggle_board(board_path: &String) -> io::Result<BoggleBoard> {
+    use std::io::BufReader;
+    use std::io::prelude::*;
+    use std::fs::File;
+
+    print!("Parsing board from {}", board_path);
+    let board_file = BufReader::new(try!(File::open(board_path)));
+    let mut width = None;
+    let mut height = None;
+    let mut letters = Vec::with_capacity(10000);
+    for line_or_err in board_file.lines() {
+        let line = line_or_err.unwrap(); // explode if error
+        if line.len() == 0 {
+            break; // end of file
+        }
+        for s in line.split(' ').filter(|s| s.len() != 0) {
+            if width.is_none() {
+                width = Some(s.parse().unwrap());
+            } else if height.is_none() {
+                height = Some(s.parse().unwrap());
+            } else {
+                letters.push(s.bytes().nth(0).expect("first char !present"));
+            }
+        }
+    }
+    Ok(BoggleBoard::new(width.expect("board width must be specified"),
+                        height.expect("board height must be specified"),
+                        letters))
+}
+```
+
+---
+
+```rust
+    fn main() -> i32 {
+      let my_homie: String = "Caspar".to_owned();
+      println!("{} was here", my_homie);
+    }
+```
+    </textarea>
+  </body>
+</html>
