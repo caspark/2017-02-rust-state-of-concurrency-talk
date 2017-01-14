@@ -27,29 +27,42 @@
 
 # TODOs
 
-* Cargo / crates.io
-
-* Strong static typing
-
-* C memory layout, easy FFI
+# Features and flavour
 
 * Imperative, C-like syntax
-    * But expression-oriented & uses lambdas heavily
-
+    * But expression-oriented, immutable by default, uses lambdas heavily, result type & panics rather than exceptions
+* Strong static typing
 * Structs with trait based inheritance (no OOP)
-
+* C memory layout, easy FFI
+* Ecosystem: Cargo / crates.io
+* Native threads
+* Strings done right: stored as UTF-8, validated at edges of app
 * Aimed at systems programming
     * Control over heap vs stack allocation
-    
-    * No automatic garbage collection
+    * "No garbage collection", RAII with scope-based freeing instead, but can us Rc<> or Arc<>.
+    * Fast - LLVM under the hood, autovectorization, etc
+    * Standard library optional (for embedded programming)
+* Other C++ differences: move (not copy) semantics by default, panic on overflow, bounds checking is opt out, raw pointer fiddling and assembly embedding is unsafe, tagged union for enum type & built in pattern matching, module system with exports rather than header files, AST-based macros
 
-    * Fast
+# Memory model
 
-* Native threads, strings stored as UTF-8
+* C++ problems:
+    * Null pointers
+    * Dangling pointer/use after free
+    * Shared mutable memory -> data races
+    * Not holding a lock (or holding the wrong one)
 
-* Backed by Mozilla
+"Shared mutable memory causes problems" - most languages are stopping the sharing or stopping the mutation - Rust says shared XOR mutable.
+ * Rust solutions: Option type, compile-time checks against pointer aliasing (ownership model), send/sync (https://doc.rust-lang.org/book/concurrency.html), lock owns data (see http://softwareengineering.stackexchange.com/questions/317873/how-does-rust-diverge-from-the-concurrency-facilities-of-c)
+
+# Concurrency in Rust
+
+ * threads
+ * channels
 
 * Get into Rayon
+
+* Steal blatantly from http://www.rust-tutorials.com/RustConf16/1-Ownership-and-Borrowing.pdf
 
 ---
 
