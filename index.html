@@ -29,19 +29,6 @@
 
 # Features and flavour
 
-* Imperative, C-like syntax
-    * But expression-oriented, immutable by default, uses lambdas heavily, result type & panics rather than exceptions
-* Strong static typing
-* Structs with trait based inheritance (no OOP)
-* C memory layout, easy FFI
-* Ecosystem: Cargo / crates.io
-* Native threads
-* Strings done right: stored as UTF-8, validated at edges of app
-* Aimed at systems programming
-    * Control over heap vs stack allocation
-    * "No garbage collection", RAII with scope-based freeing instead, but can us Rc<> or Arc<>.
-    * Fast - LLVM under the hood, autovectorization, etc
-    * Standard library optional (for embedded programming)
 * Other C++ differences: move (not copy) semantics by default, panic on overflow, bounds checking is opt out, raw pointer fiddling and assembly embedding is unsafe, tagged union for enum type & built in pattern matching, module system with exports rather than header files, AST-based macros
 
 # Memory model
@@ -57,7 +44,7 @@
 
 # Concurrency in Rust
 
- * threads
+ * threads - native threads not green threads
  * channels
 
 * Get into Rayon
@@ -170,8 +157,359 @@ Transcribed from slides at http://venge.net/graydon/talks/intro-talk-2.pdf
 
     * Mostly ignore isolation, interference, concurrency
 
+---
+
+class: center, middle
+
+# A whirlwind tour of features
+
 ???
 
+will only cover current stable features
+
+only a subset, leaving out lots of interesting bits because of lack of time
+
+point is to give a flavour of the language
+
+---
+
+# C-like syntax, with the good parts of FP
+
+```rust
+fn factorial_loop(n: u32) -> u32 {
+    // Variables are declared with `let`.
+    // The `mut` keyword allows these variables to be mutated.
+    let mut result = 1;
+    for i in 2..n+1 { // The lower bound is inclusive, the upper bound exclusive.
+        result *= i;
+    }
+    return result;
+}
+
+fn factorial_recursive(n: u32) -> u32 {
+    if n <= 1 {
+        1 // no need for `return` if it's the final expression
+    } else {
+        n * factorial_recursive(n - 1)
+    }
+}
+
+fn factorial_iterator(n: u32) -> u32 {
+    // |accum, next| defines an anonymous function.
+    // Optimizations like inline expansion reduce the range and fold
+    // to have performance similar to factorial_iterative.
+    (1..n + 1).fold(1, |accum, next| accum * next)
+}
+```
+
+???
+
+* Numbers can be signed or unsigned
+  * You know the bit width of your numbers!
+* Immutable variables by default
+* Can make any variable mutable if you own it
+* Expression-oriented: a semicolon turns an expression into a statement
+  * Final expression of a fn is the return value of that fn
+  * Means `return` is only needed for early returns
+* Anonymous function benefits from expression-ness
+  * Also can pass in a regular function there
+  * Function can close over data in scope (i.e. closure)
+
+---
+
+# Structs for data, Traits for behaviour
+
+```rust
+struct Point {
+    x: i32,
+    y: i32,
+}
+
+trait OnGrid {
+    fn calc_origin_dist(&self) -> f64;
+}
+
+impl OnGrid for Point {
+    fn calc_origin_dist(&self) -> f64 {
+        ((self.x.abs() + self.y.abs()) as f64).sqrt()
+    }
+}
+
+#[test] // attribute indicates this is a unit test
+fn can_calc_point_origin_dist() {
+    assert_eq!(Point { x: 2, y: 2 }.calc_origin_dist(), 2.0);
+}
+```
+
+???
+
+Structs are pure data
+
+Traits are ~ interfaces, inspired by haskell's type classes
+
+You implement traits to add data to your objects
+
+Test framework is built in via the test attribute
+
+Macros always end in !, are AST-based, and are hygenic
+
+assert_eq panics the thread if there's no equality
+
+2.0 is type inferred to be an f64.
+
+rust type inference is ~ good enough to infer your whole program's types, but function signatures must have types - helps aid readers and improves grepping the code
+
+rust doesn't have exceptions - the whole thread panics if there's an irrecoverable error (though you can "catch" that for specific cases)
+
+---
+
+# Operator overloading & modules
+
+```rust
+use std::ops::Add;
+
+#[derive(Debug, Eq, PartialEq)]
+pub struct Point {
+    pub x: i32,
+    pub y: i32,
+}
+
+impl Add for Point {
+    type Output = Point; // "associated type"
+
+    fn add(self, other: Point) -> Self::Output { // or "-> Point"
+        Point {
+            x: self.x + other.x,
+            y: self.y + other.y,
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn can_add_points() {
+        assert_eq!(Point { x: 3, y: 3 },
+            Point { x: 1, y: 0 } + Point { x: 2, y: 3 });
+    }
+}
+```
+
+???
+
+Add is an existing trait that we implement; compiler ties it to +
+
+Compiler can implement certain traits automatically
+
+We implement a debug string representation and equality
+
+When we implement the Add trait we can use + with our data structure
+
+Associated type is a form of generics support, like C++ templates (won't get too heavily into that here but can also accept a generic input E where E implements some trait T, in which case the compiler monomorphises )
+
+`mod tests` starts a module - modules are compiled incrementally and used for encapsulation, and no header files means no compile time explosions
+
+`#[cfg(test)]` is for conditional compilation support
+
+have to mark functions and structs `pub` to use them outside a module
+
+pub structs have hidden fields which can be exposed by pub
+
+---
+
+# True systems programming language
+
+* No garbage collection
+  * variables have lifetimes (~= scope)
+  * deallocated ("dropped") when out of scope
+
+* Explicit stack vs heap allocation
+
+```rust
+let a: Point = Point { x: 0, y: 0 }; // on stack
+let b: Box<Point> = Box::new(Point { x: 0, y: 0 }); // on heap
+let c: Box<_> = Box::new(Point { x: 0, y: 0 }); // on heap
+let d = Box::new(Point { x: 0, y: 0 }); // on heap
+```
+
+* Compiles to LLVM IR -> many optimizations come for free
+
+* Supports Win (MingGW & VS) + OSX + Linux, 32 & 64-bit
+    * Also lower tier support for arm, musl, powerpc, wasm + many more
+
+* Std lib is optional, suitable for writing an operating system from scratch
+
+* Supports custom allocators; `jemalloc` or `malloc()`+`free()` by default
+
+???
+
+no GC but can put vars into an Rc (or Arc) to get reference counting, optionally thread-safe
+
+when variables are dropped they can have destructor-like code run
+
+when something is in a `Box`, the compiler will automatically dereference it, so no syntactical overhead on call sites
+
+you can leave off the types of the variables, which i've done for `c` and `d`
+
+the big three platforms have first class support
+
+other platforms have lower tier support
+
+optional stdlib means can write OS or use for embedded systems
+
+custom allocators - will use jemalloc for a freestanding binary or malloc/free if writing a lib, but either choice can be overwritten
+
+---
+
+# Heaps more good stuff
+
+* Language features: pattern matching, `const`s, macros, Universal Function Call Syntax (UFCS), slicing syntax, lazy iterators, built-in tuples, newtype structs, etc
+
+* Package manager (`cargo`) to manage dependencies and invoke `rustc`
+
+* Good FFI: easy to call C, easy to be called from C, easy to pass data
+
+* Proper unicode string support (codepoints & graphemes), UTF-8 internally
+
+* Focus on high quality documentation & teaching newbies
+
+* Ridiculously helpful community
+
+* Open RFC-based development process with strong leadership team
+
+* 6 weeks per (backwards compatible) release; stable & beta (& nightly)
+
+
+???
+
+UFCS = universal functional call syntax, i.e. can call a method on a trait by item.method() or by trait::method(item) (or something like that - I always forget the syntax)
+
+Cargo is package and dependency management done right - embrace semver, but allow dependencies to be locked down, act as a thin wrapper around rustc without tying rustc to cargo
+
+FFI is built in, has keywords to make it easy. Can choose from a few different memory layouts for your structs. Working on C++ interop.
+
+Strings are stored as UTF-8 but only validated at the edges of your app. Rust makes you choose whether you want byte, codepoint or grapheme based indexing, and panics if you index into half a codepoint
+
+
+---
+
+class: center, middle
+
+# Let's talk about concurrency
+
+## and some related safety problems
+
+---
+
+# Typical C++ problems
+
+* Mistakes while pointer twiddling
+
+* Null pointers
+
+* Exception safety
+
+* Dangling pointer / use after free
+
+* Failure to realise memory is reallocated
+
+    * E.g. reuse an iterator after `std::vector::push_back`
+
+* Threads with shared mutable memory -> easy data races
+
+* Not holding a lock (or holding the wrong one)
+
+???
+
+Not all concurrency problems but they'll all cause your program to be incorrect
+
+Apologies for incorrect terminology, I have minimal C++ experience
+
+
+---
+
+# Rust: pointer twiddling
+
+If you mess with raw memory or break the rules without permission...
+
+```rust
+let x = 5;
+let raw = &x as *const i32;
+println!("raw points at {}", *raw); // doesn't work
+```
+
+Then you get an error:
+
+```
+error[E0133]: dereference of raw pointer requires unsafe function or block
+  --> src/main.rs:25:38
+   |
+24 |         println!("raw points at {}", *raw);
+   |                                      ^^^^ dereference of raw pointer
+
+```
+
+Instead you need to use an unsafe block if you need an escape hatch:
+
+```rust
+let x = 5;
+let raw = &x as *const i32;
+println!("raw points at {}", unsafe { *raw });
+```
+
+`unsafe {}` serves as an audit boundary/headsup: "*Attention code reviewers!*"
+
+???
+
+Unsafe blocks serve to delineate things which are unsound according to the type system
+
+E.g. Raw memory access, calling C functions, casting from one type to a completely different one, etc
+
+Useful for performance, or when you are really really certain that what you're doing is fine even though you can't prove it
+
+Lets you trade off safety for performance; and if your program crashes, you know it's due to an unsafe block somewhere
+
+---
+
+# Rust: no null pointers
+
+```rust
+pub enum Option<T> { None, Some(T) } // in stdlib
+
+fn divide(numerator: f64, denominator: f64) -> Option<f64> {
+    if denominator == 0.0 { None } else { Some(numerator / denominator) }
+}
+
+let result: Option<f64> = divide(2.0, 3.0);
+
+// Pattern match to retrieve the value
+match result {
+    // The division was valid
+    Some(x) => println!("Result: {}", x),
+    // The division was invalid
+    None    => println!("Cannot divide by 0"),
+}
+
+// OR use `if let` syntax if you don't care about the other case
+if let Some(x) = result {
+    println!("Result: {}", x);
+}
+
+// OR use "combinators" (functions) defined on `Option` if you need to keep going
+result.and_then(|x| divide(x, 2.0)) // can fail (return None), so use `and_then()`
+    .map(|half_x| half_x + 1.0) // cannot fail (returns raw value) so use `map()`
+    .map(|half_x_plus_1| println!("Result/2 + 1: {:?}", half_x_plus_1));
+```
+
+???
+
+Safe Rust code has no null
+
+Instead it uses the Option type, similar to the Maybe monad in Haskell
+
+Means you can't miss a null check when you should have one, and don't need to insert them "just to be safe"
+
+This (and other enum types of similar shape) is guaranteed to be optimised out to a null pointer under the covers
 
 
 ---
