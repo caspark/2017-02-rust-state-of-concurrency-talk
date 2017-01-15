@@ -2,7 +2,7 @@
 
 Aimed at C++ developers who have never heard of Rust; eventually gets into concurrency.
 
-To view, open `index.html`.
+To view, open `index.html`. Press P for presenter mode to see slide notes.
 
 ## Developing
 
