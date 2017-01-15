@@ -68,13 +68,20 @@ class: center, middle
 # Agenda
 
 1. What is Rust?
-    * Rust vs C++
-2. Rust's killer features
+
+    * History, whirlwind feature tour via code samples
+
+2. Safety first
+
+    * Common pitfalls in C/C++ and how Rust guards against them
+
 3. Parallelism in Rust
+
+    * A look at Rayon, a library for parallel computation
 
 ---
 
-# Origin story
+# Rust's Origin story
 
 * 2006 - 2010: Mozilla employee side project
 
@@ -428,7 +435,7 @@ Apologies for incorrect terminology, I have minimal C++ experience
 
 ---
 
-# Rust: pointer twiddling
+# Rust: pointer twiddling is not the norm
 
 If you mess with raw memory or break the rules without permission...
 
@@ -461,7 +468,9 @@ println!("raw points at {}", unsafe { *raw });
 
 ???
 
-Unsafe blocks serve to delineate things which are unsound according to the type system
+Ordinarily you write "safe Rust"
+
+Unsafe blocks serve to delineate things which are unsound according to the type system, and content of them is called "Unsafe Rust"
 
 E.g. Raw memory access, calling C functions, casting from one type to a completely different one, etc
 
