@@ -509,7 +509,10 @@ Instead it uses the Option type, similar to the Maybe monad in Haskell
 
 Means you can't miss a null check when you should have one, and don't need to insert them "just to be safe"
 
-This (and other enum types of similar shape) is guaranteed to be optimised out to a null pointer under the covers
+This (and other enum types of similar shape) is guaranteed to be optimised out to a null pointer under the covers, so no performance penalty
+
+---
+
 
 
 ---
