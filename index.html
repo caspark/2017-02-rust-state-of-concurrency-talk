@@ -27,10 +27,6 @@
 
 # TODOs
 
-# Features and flavour
-
-* Other C++ differences: move (not copy) semantics by default, panic on overflow, bounds checking is opt out, raw pointer fiddling and assembly embedding is unsafe, tagged union for enum type & built in pattern matching, module system with exports rather than header files, AST-based macros
-
 # Memory model
 
 * C++ problems:
@@ -46,6 +42,7 @@
 
  * threads - native threads not green threads
  * channels
+ * send/sync - steal from https://blog.rust-lang.org/2015/04/10/Fearless-Concurrency.html
 
 * Get into Rayon
 
@@ -145,6 +142,8 @@ Sample of Rust production users: https://www.rust-lang.org/en-US/friends.html
 ???
 
 Original motivation for Rust as described by Graydon to Mozilla employees working on Firefox.
+
+Of course there have been a few new C++ standards since then, which have improved C++ in a few different ways
 
 Transcribed from slides at http://venge.net/graydon/talks/intro-talk-2.pdf
 
@@ -397,6 +396,13 @@ FFI is built in, has keywords to make it easy. Can choose from a few different m
 
 Strings are stored as UTF-8 but only validated at the edges of your app. Rust makes you choose whether you want byte, codepoint or grapheme based indexing, and panics if you index into half a codepoint
 
+Documentation is great, in fact most of these slides are adapted from official documentation or blog posts
+
+Community tries hard to not be dismissive of other languages and accepting of newbies
+
+Anyone can write an RFC to propose evolution of the language, tooling or community in a certain direction; core team gathers feedback and makes final decision.
+
+Features and bug fixes come regularly; Rust was highly unstable back in 2014 but very stable now. Worst I've had since 1.0 is dealing with new lints and warnings, which is great.
 
 ---
 
@@ -408,17 +414,17 @@ class: center, middle
 
 ---
 
-# Typical C++ problems
+# Typical correctness & concurrency problems
 
-* Mistakes while pointer twiddling
+* Mistakes while pointer twiddling (mostly C)
 
 * Null pointers
 
-* Exception safety
+* Exception safety (C++)
 
-* Dangling pointer / use after free
+* Dangling pointer / use after free (C/C++)
 
-* Failure to realise memory is reallocated
+* Failure to realise memory is reallocated (C/C++)
 
     * E.g. reuse an iterator after `std::vector::push_back`
 
@@ -428,14 +434,15 @@ class: center, middle
 
 ???
 
+Pointer twiddling isn't as common as in C but if you fuck it up then your program will still behave badly
+
 Not all concurrency problems but they'll all cause your program to be incorrect
 
 Apologies for incorrect terminology, I have minimal C++ experience
 
-
 ---
 
-# Rust: pointer twiddling is not the norm
+# Rust: pointer twiddling explicitly delineated
 
 If you mess with raw memory or break the rules without permission...
 
@@ -447,7 +454,8 @@ println!("raw points at {}", *raw); // doesn't work
 
 Then you get an error:
 
-```
+```c
+$ cargo build
 error[E0133]: dereference of raw pointer requires unsafe function or block
   --> src/main.rs:25:38
    |
@@ -518,11 +526,388 @@ Instead it uses the Option type, similar to the Maybe monad in Haskell
 
 Means you can't miss a null check when you should have one, and don't need to insert them "just to be safe"
 
-This (and other enum types of similar shape) is guaranteed to be optimised out to a null pointer under the covers, so no performance penalty
+Enums in Rust are tagged unions
+
+Even better, this (and other enum types of similar shape) is guaranteed to be optimised out to a null pointer under the covers, so no performance penalty
+
+Similar to the proposed http://en.cppreference.com/w/cpp/experimental/optional
 
 ---
 
+# Rust: no exceptions: error values and panics
 
+```rust
+pub enum Result<T, E> { Ok(T), Err(E) } // in stdlib
+
+pub enum Error { // simplification of std::io::Error
+    NotFound, PermissionDenied, ConnectionRefused,
+    ConnectionReset, ConnectionAborted, NotConnected, // etc
+}
+
+fn parse_boggle_board(board_path: &String) -> Result<io::Error, BoggleBoard> {
+  let board_file = BufReader::new(try!(File::open(board_path)));
+  // (you'd actually read from the file here)
+  Ok(BoggleBoard::new(/* construct using data read from file */))
+}
+```
+
+* Result has similar combinator functions as `Option`: `and_then()`, `map()`, etc
+
+    * And same again to work with error side: `err_map()`, etc
+
+* OR: a thread can panic, which unwinds the stack, calling all "destructors"
+
+    * safe-to-unwind generally only a concern for unsafe FFI code
+    * can be detected by a controlling thread or (rarely done) same thread
+
+* OR: program can hard abort, e.g. when unable to heap allocate memory
+
+???
+
+Rust has no exceptions but instead has a Result type
+
+`Result` type captures either an error of some type, or a successful result.
+
+Similar to Either in Haskell or Scala - it's the standard disjunction type.
+
+So instead of a function signature where you have no idea if it can fail (assuming you're not using Java checked exceptions or C++ exception specifications), you know if a function is expected to be able to fail.
+
+Alternatively, for irrecoverable errors where you really want to explode, you can panic the whole thread.
+
+For example, arithmetic overflow or underflow causes panic by default in a debug build (is very controllable), and indexing into a vector is always bounds checked (unless unsafe) and failing that check causes a panic.
+
+unwinding panics can also be "caught" in same thread - only for FFI really: https://doc.rust-lang.org/std/panic/fn.catch_unwind.html Normally you'd use Result
+
+Since panic causes unwinding and can be caught, it's similar to unwinding due to exceptions...
+
+But because Rust handles deallocation of resources via RAII on steroids (see next slide), safe Rust code is automatically unwinding-safe.
+
+More info:
+
+* https://doc.rust-lang.org/book/error-handling.html
+* https://doc.rust-lang.org/nomicon/unwinding.html
+* https://doc.rust-lang.org/nomicon/exception-safety.html
+* https://doc.rust-lang.org/nomicon/poisoning.html
+* http://huonw.github.io/blog/2016/04/myths-and-legends-about-integer-overflow-in-rust/
+
+---
+
+# Rust: types guard against use after free
+
+```rust
+let a = Box::new(42i32);
+let b = a; // move semantics by default, so `a` moves to `b`
+println!("a is {}", a);
+drop(b); // similar to explicit free() - is not normally done in Rust
+println!("b is {}", b);
+```
+
+```c
+$ cargo build
+error[E0382]: use of moved value: `a`
+  --> src/main.rs:52:29
+   |
+51 |         let b = a; // move semantics by default, so `a` moves to `b`
+   |             - value moved here
+52 |         println!("a is {}", a);
+   |                             ^ value used here after move
+   |
+   = note: moved because `a` has type `Box<i32>` & does not implement `Copy` trait
+
+error[E0382]: use of moved value: `b`
+  --> src/main.rs:54:29
+   |
+53 |         drop(b); // similar to explicit free() - is not normally done in Rust
+   |              - value moved here
+54 |         println!("b is {}", b);
+   |                             ^ value used here after move
+   |
+   = note: moved because `b` has type `Box<i32>` & does not implement `Copy` trait
+```
+
+???
+
+i32 suffix is literal syntax to include type of the integer explicitly in the literal, not important
+
+Rust has move semantics by default - nice because it means you don't get exceptions when assigning
+
+Since Rust tracks the lifetimes of everything and knows when things get deallocated, it can tell when you're about to reference bad memory
+
+If our type that we were trying to move implemented the special `Copy` trait as hinted, then Rust would know it can do a byte for byte copy
+
+Here 42 implements Copy but Box doesn't (otherwise it'd be way to easy to use a ton of heap memory)
+
+To not use move semantics, use `let b = a.clone()` - that fixes first error by cloning whatever is in the box (a number, for which clone is a byte for byte copy) and allocating it on the heap
+
+OR "borrow" (aka take a reference, like a pointer) `a`: `let b = &a`
+
+Obviously to fix second error, don't call drop() - let the variable go out of scope so that Rust automatically deallocates it as part of returning from the function (which is what you normally do)
+
+---
+
+# Taking it a step further: "borrowing"
+
+In C++ you have `unique_ptr` which sounds similar to Rust's ideas, however...
+
+```C++
+    unique_ptr<int> orig(new int(5));
+    cout << *orig << endl;
+    auto stolen = move(orig);
+    cout << *orig << endl; // undefined behaviour! /me waits for time travel :)
+```
+
+Rust takes this a step further by explicitly encoding the idea of taking a reference to a uniquely owned variable without moving it.
+
+When pointer is pointing at a variable `a`, *`a` is borrowed*.
+
+```rust
+let a: i32 = 42;
+let b: &i32 = &a; // now `b` can't "live longer"" than `a`
+                  // `a` also cannot be mutated while `b` is "alive"
+                  // (`a` isn't `mut a` so wouldn't be mutable anyway)
+let c: &i32 = &a; // multiple borrows of same variable are fine
+let d: &i32 = b;  // borrows can also be copied without any problem
+```
+
+???
+
+Borrowing is one of the central ideas of Rust so make a small detour to explain how it's different to unique_ptr
+
+Borrowing rules are enforced by the borrow checker; it's painful when learning Rust & is responsible for Rust's reputation of having a steep learning curve.
+
+But once you understand the rules and learn best practice program design, it's responsible for avoiding whole classes of bugs related to pointer aliasing, and it turns out it makes a bunch of other things better too.
+
+---
+
+# Rust: no "mutation reallocs memory" problem
+
+In C++, reusing iterator after a `std::vector::push_back` causes undefined behaviour.
+
+In Rust, it won't compile, because a borrowed variable cannot be mutated while a borrowing is alive!
+
+```rust
+let mut vec = Vec::new(); // a growable vector, like in C++
+vec.push(1); // a push can cause a reallocation + move
+vec.push(2);
+for &i in vec.iter() { // `.iter()` returns an iterator
+  vec.push(i); // duplicate each entry - this would be unsafe in C++!
+}
+```
+
+```rust
+$ cargo build
+error[E0502]: cannot borrow `vec` as mutable because it is also immutably borrowed
+  --> src/main.rs:69:9
+   |
+68 |         for &i in vec.iter() {
+   |                   --- immutable borrow occurs here
+69 |         vec.push(i);
+   |         ^^^ mutable borrow occurs here
+70 |         }
+   |         - immutable borrow ends here
+```
+
+???
+
+What actually happens under the covers is that Rust allows immutable borrows (as on previous slide) but also allows mutable borrows.
+
+The rule is that you can't have a mutable borrow unless
+
+1. you own that variable
+2. the variable is `mut`
+3. there are no other borrows
+
+Any borrow, including methods defined on a trait implementation for a struct, can either:
+
+1. consume the whole struct (take ownership, struct can't be used afterwards - good for builders - unless the struct is returned later)
+2. borrow the struct immutably (the norm for non-mutating methods)
+3. borrow the struct mutably (norm for mutating methods)
+
+Since `.iter()` causes a borrow, we can't '
+ because the borrow checker prevents mutation while the iterator holds a reference to the underlying data structure.
+
+More:
+
+* Rules of borrowck: https://www.reddit.com/r/rust/comments/5ny09j/tips_to_not_fight_the_borrow_checker/dcf9khl/
+
+---
+
+# Rust: data race protection via borrowck
+
+> "Shared mutable memory is the root of all evil"
+
+### Modern languages solve by either:
+
+* no *shared* memory: force threads to send messages to each other
+
+* no *mutation* of memory: force threads to take copies of data
+
+### Rust says: "no *shared mutation* of memory"
+
+Borrowing rules we just covered statically guarantee at compile time that **no thread can mutate data while another thread can access that same data**.
+
+???
+
+Borrowck is the colloqial term for the borrow checker - named after the phase of the compilation process AFAIK.
+
+Channel based approachs like Go and actor systems like Erlang and Akka force threads to send memory to each other
+
+Other languages like Haskell, Scala force your data to be immutable and copied
+
+Rust identifies that neither is inherently bad and each approach has its upsides and downsides, so allows using them together.
+
+Put another way: shared memory XOR mutation of aforementioned memory.
+
+The way I heard it told was that this was almost an accidental consequence of trying to solve other kinds of problems (use after free, mutation): Rust designers realised that the borrow checker helps here too!
+
+More: https://doc.rust-lang.org/beta/nomicon/races.html
+
+---
+
+# Rust: borrowck forces holding correct locks
+
+```rust
+// (simplification of stdlib mutex - stdlib is more ergonomic)
+
+// create a new mutex
+fn mutex<T: Send>(t: T) -> Mutex<T>;
+
+// acquire the lock
+fn lock<T: Send>(mutex: &Mutex<T>) -> MutexGuard<T>;
+
+// access the data protected by the lock
+fn access<T: Send>(guard: &mut MutexGuard<T>) -> &mut T;
+
+
+// example usage
+fn use_lock(mutex: &Mutex<Vec<i32>>) {
+  // acquire the lock, taking ownership of a guard;
+  // the lock is held for the rest of the scope
+  let mut guard = lock(mutex);
+
+  // access the data by mutably borrowing the guard
+  let vec = access(&mut guard);
+
+  // vec has type `&mut Vec<i32>`
+  vec.push(3);
+
+  // lock automatically released here, when `guard` is destroyed
+}
+```
+
+???
+
+In most languages it's easy to hold the wrong lock (or not hold a lock when you should be holding one)
+
+Usually only documentation guards against holding no lock or the wrong lock
+
+so locks get a bad rap, but sometimes you know you need a lock
+
+In Rust, a mutex is conceptually like a container which holds the data that it protects, so it's generic over a type
+
+Successfully acquiring the lock gets you a MutexGuard
+
+From the MutexGuard, you can access the data protected by the mutex
+
+But crucially, the resulting T cannot live longer than the MutexGuard (eachg borrow has a lifetime, and the output borrow is assumed to live at most as long as the input-ted data could), and the lock is only released when the guard is destroyed.
+
+So it's not possible to use the lock incorrectly without getting a compiler error, and it's not possible to access the data without holding the lock.
+
+More:
+* https://blog.rust-lang.org/2015/04/10/Fearless-Concurrency.html
+* http://softwareengineering.stackexchange.com/questions/317873/how-does-rust-diverge-from-the-concurrency-facilities-of-c
+
+---
+
+# Rust: has channels for message passing too
+
+```rust
+use std::thread;
+use std::sync::mpsc::channel;
+
+// Create a shared channel that can be sent along from many threads
+// where tx is the sending half (tx for transmission), and rx is the receiving
+// half (rx for receiving).
+let (tx, rx) = channel();
+for i in 0..10 {
+  let tx = tx.clone();
+  thread::spawn(move|| { // spawn a thread then send the thread number
+    tx.send(i).unwrap(); // returns a Result; unwrap() is quick & dirty handling
+  }); // spawn() returns a handle we could (but don't) use to check for panic
+}
+
+for _ in 0..10 { // wait for all threads to send their numbers
+  let j = rx.recv().unwrap(); // again, dirty dirty error handling
+  assert!(0 <= j && j < 10);
+}
+```
+
+???
+
+Initially had green threads and only channels built into library to communicate (like Go)
+
+Now native threads (green threads required a runtime which conflicted with Rust being suitable for embedding into other applications)
+
+`move` keyword before the closure's double pipe (`||`) indicates that rather than treat references to variables outside the closure as references, those variables should instead be moved into the closure, such that they're owned by the closure (rather than their original owning context).
+
+As an aside, we could be checking whether or not each thread panics here, but we don't because we're talking about channels
+
+Nice: channels are implemented as library code - can get a replacement channel library which supports multi producer and multi consumer, and it's just as ergonomic to use
+
+Can even handle application signals via `chan-signal`, which is super useful if you've ever read up on what you can do during signal handling (spoiler: not much)
+
+More:
+
+* https://static.rust-lang.org/doc/master/std/sync/mpsc/index.html
+* https://github.com/BurntSushi/chan
+* https://github.com/BurntSushi/chan-signal
+
+---
+
+# Rust: thread safety checked by compiler
+
+### Q: Can I send a variable between threads?
+
+A: Only if it implements the `Send` trait, which is almost all primitive types and types composed thereof.
+
+But, for example, in SDL, the thread that creates the window must be the one that handles the events. The `SdlWindow` struct would not implement `Send`.
+
+### Q: Can I access a shared variable from another thread?
+
+A: Only if it implements the `Sync` trait, which is any type `T` where `&T` is safe to pass between threads without undefined behaviour, which is most types.
+
+But, for example, the `Rc` smart pointer (implements reference counting) does not use atomics to count references & so does not implement `Sync`.<br>
+You would use an `Arc` (Atomic Rc) to share a reference count between threads.
+
+???
+
+I lied a little on the last slide
+
+You can't send anything you like across channels
+
+Only structs which are so-called `Send` can be sent across channels or moved to another thread. That's useful when you're wrapping a library which itself isn't thread safe.
+
+And only structs which implement `Sync` can be accessed from another thread.
+
+Compiler auto implements these traits for all eligible structs, which is most struckts.
+
+And if you know better than the compiler, you can opt a struct in or out (requires unsafe code, because it's an escape hatch)
+
+More:
+
+* https://doc.rust-lang.org/book/concurrency.html
+* https://doc.rust-lang.org/std/marker/trait.Send.html
+* https://doc.rust-lang.org/std/marker/trait.Sync.html
+* https://doc.rust-lang.org/nomicon/send-and-sync.html
+* https://doc.rust-lang.org/std/sync/atomic/
+
+---
+
+class: center, middle
+
+## thanks!
+
+# Questions?
 
 ---
 

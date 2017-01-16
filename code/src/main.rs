@@ -45,6 +45,52 @@ fn main() {
             .map(|half_x| half_x + 1.0) // cannot fail (returns raw value) so use `map`
             .map(|half_x_plus_1| println!("Result/2 + 1: {:?}", half_x_plus_1));
     }
+
+    {
+        let a = Box::new(42i32);
+        let b = &a; // move semantics by default, so `a` moves to `b`
+        println!("a is {}", a);
+        drop(b); // similar to explicit free() - is not normally done in Rust
+        println!("b is {}", b);
+    }
+
+    {
+        let mut a: i32 = 42;
+        let b: &i32 = &a; // now `b` can't "live longer"" than `a`
+                        // `a` also cannot be mutated while `b` is "alive"
+        let c: &i32 = &a; // multiple borrows of same variable are fine
+        let d: &i32 = b;  // borrows can also be copied without any problem
+    }
+
+    {
+        let mut vec = Vec::new(); // a growable vector, like in C++
+        vec.push(1); // a push can cause a reallocation + move
+        vec.push(2);
+        for &i in vec.iter() { // `.iter()` returns an iterator
+            // vec.push(i); // duplicate each entry - this would be unsafe in C++!
+        }
+    }
+
+    {
+        use std::thread;
+        use std::sync::mpsc::channel;
+
+        // Create a shared channel that can be sent along from many threads
+        // where tx is the sending half (tx for transmission), and rx is the receiving
+        // half (rx for receiving).
+        let (tx, rx) = channel();
+        for i in 0..10 {
+            let tx = tx.clone();
+            thread::spawn(move|| { // spawn a thread then send the thread number
+                tx.send(i).unwrap(); // returns a Result; unwrap() is quick & dirty handling
+            });
+        }
+
+        for _ in 0..10 { // wait for all threads to send their numbers
+            let j = rx.recv().unwrap(); // again, dirty dirty error handling
+            assert!(0 <= j && j < 10);
+        }
+    }
 }
 
 fn divide(numerator: f64, denominator: f64) -> Option<f64> {
