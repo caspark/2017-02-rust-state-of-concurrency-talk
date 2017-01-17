@@ -25,10 +25,10 @@ fn main() {
     }
 
     {
-        let result: Option<f64> = divide(2.0, 3.0);
+        let opt: Option<f64> = divide(2.0, 3.0);
 
         // Pattern match to retrieve the value
-        match result {
+        match opt {
             // The division was valid
             Some(x) => println!("Result: {}", x),
             // The division was invalid
@@ -36,12 +36,12 @@ fn main() {
         }
 
         // or use `if let` syntax if you don't care about the other case
-        if let Some(x) = result {
+        if let Some(x) = opt {
             println!("Result: {}", x);
         }
 
         // or use "combinators" (functions) defined on `Option`
-        result.and_then(|x| divide(x, 2.0)) // can fail (return None), so use `and_then`
+        opt.and_then(|x| divide(x, 2.0)) // can fail (return None), so use `and_then`
             .map(|half_x| half_x + 1.0) // cannot fail (returns raw value) so use `map`
             .map(|half_x_plus_1| println!("Result/2 + 1: {:?}", half_x_plus_1));
     }

@@ -30,13 +30,7 @@ hi!
 
 ???
 
-Caspar, like the friendly ghost, here to talk about Rust.
-
-I don't write production Rust but I've been looking at it for 2 years
-
-I run the Sydney rust meetup: https://www.meetup.com/en-AU/Rust-Sydney/
-
-I'm intermediate or maybe just above intermediate level with Rust.
+I'm Caspar, like the friendly ghost
 
 ---
 
@@ -48,6 +42,16 @@ class: center, middle
 
 ### "Technology from the past come 
 ### to save the future from itself"
+
+???
+
+here to talk about Rust.
+
+I don't write production Rust but I've been looking at it for 2 years
+
+I run the Sydney rust meetup: https://www.meetup.com/en-AU/Rust-Sydney/
+
+I'm intermediate or maybe just above intermediate level with Rust.
 
 ---
 
@@ -117,7 +121,7 @@ Sample of Rust production users: https://www.rust-lang.org/en-US/friends.html
 
 * C++ is well past expiration date:
 
-    * Wildly unsafe in almost every way
+    * Wildly unsafe in almost every way (sic)
 
         * Memory unsafe, no ownership policies, no concurrent control at all, can't even keep const values constant.
 
@@ -254,8 +258,6 @@ assert_eq panics the thread if there's no equality
 
 rust type inference is ~ good enough to infer your whole program's types, but function signatures must have types - helps aid readers and improves grepping the code
 
-rust doesn't have exceptions - the whole thread panics if there's an irrecoverable error (though you can "catch" that for specific cases)
-
 ---
 
 # Operator overloading & modules
@@ -358,7 +360,7 @@ custom allocators - will use jemalloc for a freestanding binary or malloc/free i
 
 # Heaps more good stuff
 
-* Language features: pattern matching, `const`s, macros, Universal Function Call Syntax (UFCS), slicing syntax, lazy iterators, built-in tuples, newtype structs, etc
+* Language features: `const`s, Universal Function Call Syntax (UFCS), Python-like slicing syntax, lazy iterators, built-in tuples, etc
 
 * Package manager (`cargo`) to manage dependencies and invoke `rustc`
 
@@ -486,10 +488,10 @@ fn divide(numerator: f64, denominator: f64) -> Option<f64> {
     if denominator == 0.0 { None } else { Some(numerator / denominator) }
 }
 
-let result: Option<f64> = divide(2.0, 3.0);
+let opt: Option<f64> = divide(2.0, 3.0);
 
 // Pattern match to retrieve the value
-match result {
+match opt {
     // The division was valid
     Some(x) => println!("Result: {}", x),
     // The division was invalid
@@ -497,12 +499,12 @@ match result {
 }
 
 // OR use `if let` syntax if you don't care about the other case
-if let Some(x) = result {
+if let Some(x) = opt {
     println!("Result: {}", x);
 }
 
 // OR use "combinators" (functions) defined on `Option` if you need to keep going
-result.and_then(|x| divide(x, 2.0)) // can fail (return None), so use `and_then()`
+opt.and_then(|x| divide(x, 2.0)) // can fail (return None), so use `and_then()`
     .map(|half_x| half_x + 1.0) // cannot fail (returns raw value) so use `map()`
     .map(|half_x_plus_1| println!("Result/2 + 1: {:?}", half_x_plus_1));
 ```
