@@ -24,13 +24,21 @@
   </head>
   <body onload="var slideshow = remark.create({highlightStyle: 'monokai'});">
     <textarea id="source">
+class: center, middle
 
-# TODOs
+hi!
 
-* Get into Rayon
+???
+
+Caspar, like the friendly ghost, here to talk about Rust.
+
+I don't write production Rust but I've been looking at it for 2 years
+
+I run the Sydney rust meetup: https://www.meetup.com/en-AU/Rust-Sydney/
+
+I'm intermediate or maybe just above intermediate level with Rust.
 
 ---
-
 
 class: center, middle
 
@@ -99,7 +107,7 @@ Rust is explicitly not a language to perform programming research in - it's a be
 
 Older languages such as Mesa (1977), BETA (1975), CLU (1974)
 
-Of course mozilla is a production user too.
+Of course mozilla is a production user too, building their next web browser - which will have neat things like e.g. multithreaded rendering enabled by Rust's features
 
 Sample of Rust production users: https://www.rust-lang.org/en-US/friends.html
 
@@ -553,6 +561,8 @@ Similar to Either in Haskell or Scala - it's the standard disjunction type.
 
 So instead of a function signature where you have no idea if it can fail (assuming you're not using Java checked exceptions or C++ exception specifications), you know if a function is expected to be able to fail.
 
+If you don't check the result (that is, you just throw it away), then the compiler will warn you about it.
+
 Alternatively, for irrecoverable errors where you really want to explode, you can panic the whole thread.
 
 For example, arithmetic overflow or underflow causes panic by default in a debug build (is very controllable), and indexing into a vector is always bounds checked (unless unsafe) and failing that check causes a panic.
@@ -881,6 +891,115 @@ More:
 * https://doc.rust-lang.org/std/marker/trait.Sync.html
 * https://doc.rust-lang.org/nomicon/send-and-sync.html
 * https://doc.rust-lang.org/std/sync/atomic/
+* http://huonw.github.io/blog/2015/02/some-notes-on-send-and-sync/ (just before 1.0 release)
+
+---
+
+# Rust: optionally parallel iterators via Rayon
+
+Regular stdlib lazy iterator (compiles to similar code as a for loop):
+
+```rust
+let dot_product = vec1.iter() // get an iterator over the 1st vector
+    .zip(vec2.iter()) // make pairs of elems out of 1st & 2nd vectors
+    .map(|(i, j)| i * j) // make pairs of multiply pairs together
+    .sum(); // sum element 
+```
+
+Magic *optionally* parallel version from Rayon library, with no loss of safety:
+
+```rust
+let dot_product = vec1.par_iter() // now the same thing again, but in parallel!
+    .zip(vec2.par_iter())
+    .map(|(i, j)| i * j) // .par_iter()s above means this may run in parallel
+    .sum(); // this may also run in parallel
+```
+
+`.par_iter()` is a high level wrapper around one basic & simple API:
+
+```rust
+// `do_something` and `do_something_else` *may* run in parallel via work stealing
+// ... but only if there are free CPU cores at work stealing time!
+let (result_a, result_b) = join(|| calc_result_a(), || calc_result_b())
+```
+
+???
+
+The Send & Sync traits keep giving
+
+Let's say you have 2 huge vectors and you want to calculate the dot product of them
+
+You could write a for loop for that, but using the standard library's iterator APIs is less error prone
+
+Once you've written that you can pull in the Rayon library and have the same thing run in parallel via a work stealing thread pool
+
+Here this is obviously thread safe, but the really cool is that even if you were mutating some state already on the stack or the heap, the code wouldn't compile if 
+
+* closures passed to `map()` touch non-threadsafe data structures (because those structures would be non-Sync)
+* OR if the vectors contained data that were not safe to pass between threads (the data was non-Send)
+
+Another really neat detail is that this functionality is built on a really simple primitive, which just lets 2 pieces of code optionally run in parallel.
+
+1. Before `calc_result_a()` starts running, `calc_result_b` will be put onto a queue
+2. If another thread is free, it will steal `calc_result_b` and work on it
+3. If `calc_result_a()` finishes and result b isn't done yet, the same thread will calc result b
+
+Naturally avoids splitting work into too many threads when there's not enough CPU capacity to make use of those threads
+
+Can use this API to implement quick sort in parallel, and rust's type system will actually catch the case where you're operating on overlapping parts of the vector you're sorting
+
+For 1024kb arrays, 4x speedup on 4 core CPU via parallel quicksort, slightly slower than normal for 1k arrays. Most expensive bit of algorithm is putting work onto the queue, but rust's focus on zero cost abstractions keeps this efficient enough.
+
+Possibly faster now because these numbers are from a year ago.
+
+Num of threads in the thread pool is usual equal to num logical cores, so obviously not a good idea to use this for non-CPU bound things.
+
+More info:
+
+* http://smallcultfollowing.com/babysteps/blog/2015/12/18/rayon-data-parallelism-in-rust/
+* http://smallcultfollowing.com/babysteps/blog/2016/02/19/parallel-iterators-part-1-foundations/
+* http://smallcultfollowing.com/babysteps/blog/2016/02/25/parallel-iterators-part-2-producers/
+* http://smallcultfollowing.com/babysteps/blog/2016/11/14/parallel-iterators-part-3-consumers/
+
+---
+
+# Why not Rust?
+
+* Many existing established C++ codebases
+    * Overhead of introducing Rust into build systems, etc
+
+* C++ has massive existing ecosystem of libraries
+    * Rust/C++ interop is nascent; roadmapped for 2017
+
+* Steep learning curve: many features + borrow checker
+    * Known problem, roadmapped for 2017
+
+* Minimal IDE support: debug, view types, autocomplete and goto defn
+    * But Rust Language Server is coming in 2017
+
+* Compile speed is common pain point (not sure of comparison to C++)
+    * mid-level-IR, incremental compilation and perf fixes being rolled out
+
+???
+
+Lots of good things about Rust, but why wouldn't you want to use Rust?
+
+Here are some reasons which I basically stole from the 2017 roadmap
+
+1. Don't throw out working code, and of course introducing a new tool has overhead about build systems
+
+2. C++ has a greater selection of native libraries; you can get very far with Rust wrapped around C libs and the native Rust libraries written in the last ~ 2 years but it'll really be compelling once C++ interop lands
+
+3. Rust's learning curve - doesn't have legacy but has a lot of features, and the borrow checker is punishing initially while you're unlearning bad habits.. but a big boost later
+
+4. The basics of IDE support are there from the community, but there's a lot more scope for improvement: Rust team is building a cross-platform editor-agnostic background daemon for IDEs and editors which will expose everything the compiler knows, so should get awesome things like visual indication of lifetimes for a selected variable, which will help learning curve too
+
+5. People often complain about compile speed but not sure if a problem relative to C++ with it's header problems. Regardless lots of people are working to fix it via combination of introducing mid level intermediate representation, incremental compilation based on that, and regular performance improvements (fair bit of low hanging fruit due to compiler being so old)
+
+More info:
+
+* rust roadmap: https://github.com/aturon/rfcs/blob/roadmap-2017/text/0000-roadmap-2017.md
+* rust language server: https://internals.rust-lang.org/t/introducing-rust-language-server-source-release/4209 and  https://github.com/jonathandturner/rls
 
 ---
 
@@ -891,8 +1010,6 @@ class: center, middle
 # Questions?
 
 ---
-
-## A code sample
 
 ```rust
 fn parse_boggle_board(board_path: &String) -> io::Result<BoggleBoard> {
@@ -926,14 +1043,9 @@ fn parse_boggle_board(board_path: &String) -> io::Result<BoggleBoard> {
 }
 ```
 
----
+???
 
-```rust
-    fn main() -> i32 {
-      let my_homie: String = "Caspar".to_owned();
-      println!("{} was here", my_homie);
-    }
-```
+Backup: a real full code sample from https://github.com/caspark/algorithms2/tree/master/5-boggle
     </textarea>
   </body>
 </html>
