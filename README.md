@@ -4,7 +4,9 @@ Aimed at C++ developers who have never heard of Rust; eventually gets into concu
 
 Doesn't cover RefCell, atomics (at least not in detail), or [Tokio/Futures](https://tokio.rs/).
 
-To view, open `index.html`. Press P for presenter mode to see slide notes.
+To view, open `index.html`. Press P for presenter mode to see (copious) slide notes.
+
+Aside from [the Rust book and the 'nomicon](https://doc.rust-lang.org/), [Rust for C++ programmers](https://github.com/nrc/r4cppp) might be helpful too.
 
 ## Developing
 
