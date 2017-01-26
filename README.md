@@ -1,10 +1,10 @@
-# Rust intro for C++ developers
+# Rust Concurrency for C++ developers
 
 Aimed at C++ developers who have never heard of Rust; eventually gets into concurrency.
 
-Doesn't cover RefCell, atomics (at least not in detail), or [Tokio/Futures](https://tokio.rs/).
+To view, check out https://caspark.github.io/2017-01-rust-c-concurrency-talk/  (or clone and open `index.html`), or you can view the PDF versions of the slides (without slide notes) by checking out [the releases page](https://github.com/caspark/2017-01-rust-c-concurrency-talk/releases).
 
-To view, open `index.html`. Press P for presenter mode to see (copious) slide notes.
+Doesn't cover RefCell, atomics (at least not in detail), or [Tokio/Futures](https://tokio.rs/).
 
 Aside from [the Rust book and the 'nomicon](https://doc.rust-lang.org/), [Rust for C++ programmers](https://github.com/nrc/r4cppp) might be helpful too.
 
