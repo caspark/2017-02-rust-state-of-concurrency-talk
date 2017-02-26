@@ -98,21 +98,17 @@ I hope to give you an intuitive understanding of Rust's concurrency options
 
 # Agenda
 
-1. Ownership & the Copy trait
+1. Refresh the basics
 
-2. Borrowing & the borrow checker
+    * ownership, copying, borrowing
 
-3. Threads & data race protection
+2. Standard library concurrency
 
-4. Channels
+    * threads, data races, channels, locks, `Send` & `Sync`
 
-6. Locks
+3. Third party concurrency
 
-7. Send & Sync traits
-
-8. Parallel iterators via Rayon
-
-9. Futures, Streams, Tokio
+    * parallel iterators, futures, streams, tokio
 
 ???
 
@@ -128,13 +124,13 @@ I hope to give you an intuitive understanding of Rust's concurrency options
 
 # Ownership
 
-* Each piece of data is owned by another piece of memory
+* Each variable (pointing at data) is owned by another variable
 
-* An owner is responsible for deallocating owned resources (e.g. memory)
+* Each owner is responsible triggers deallocation of owned resources (e.g. memory. file handlers, etc) when its lifetime ends as it goes out of scope
 
-* Ownership forms a directed acyclic graph rooted in `main()`'s stack
+* Ownership thus forms a directed acyclic graph rooted in `main()`'s stack
 
-* Can only mutate data via a variable that owns that data
+* And we can only mutate data via a variable if that variable is the owner
 
 ???
 
@@ -154,11 +150,11 @@ struct Starscape {
 
 struct NyanCat {
     pos: (i32, i32),
-    volume: u64,
+    volume: u64, // more bits = louder
 }
 
 fn main() {
-    let universe: Starscape = unimplemented!(); // somehow make a Starscape
+    let universe: Starscape = /*...*/; // somehow make a Starscape
 }
 ```
 
@@ -168,8 +164,13 @@ Just before `main()` completes, ownership looks like:
 
 For example, the `main()` scope owns the `Starscape` via the `universe` let binding.
 
----
+???
 
+Notice this has very little to do with heap or non-heap allocation
+
+e.g. Vec contents are on the heap but doesn't affect ownership thereof
+
+---
 
 # Assignment moves unless a type is `Copy`
 
@@ -177,6 +178,7 @@ For example, the `main()` scope owns the `Starscape` via the `universe` let bind
 let cat: NyanCat = unimplemented!(); // somehow make a cat
 
 let cat2: NyanCat = cat;
+// can't do anything with cat now
 ```
 
 `cat2` now references the memory that `cat2` used to reference, and ownership has moved to `cat2` as well.
@@ -192,6 +194,8 @@ struct NyanCat {
 ```
 
 Causes assignment to instead do a bit-by-bit copy of referenced memory, like a faster version of calling `.clone()`.
+
+Can also implement copy directly but it requires unsafe {} if you do that.
 
 ---
 
@@ -223,13 +227,15 @@ let cat2: &mut NyanCat = &mut cat;
 
 Borrowing must always follow 5 simple rules:
 
+&nbsp;
+
 1. Can only have one mutable borrow at a time
 
 2. Can have as many immutable borrows as you want
 
-3. Cannot borrow the same data immutably and mutably at the same time
+3. Cannot borrow mutatably if there is another active borrow
 
-4. Cannot mutate if there is a different borrow active
+4. Cannot mutate without ownership or an active mutable borrow
 
 5. A borrow may not outlive the underlying variable's lifetime
 
@@ -247,7 +253,7 @@ class: center, middle
 
 # Threads
 
-Native threads, not green threads
+Native threads, not green threads:
 
 ```rust
 use std::thread;
@@ -264,12 +270,15 @@ for i in 0..10 {
 
 * But threads can panic too, which is usually caught at thread boundaries
 
-    * Can also catch within the thread but generally only done for FFI
+    * Can also catch panics within a thread but generally only done for FFI
 
 ???
 
-fairly well known that Rust used to have green threads but ripped them out - runtime requirement made them conflict with Rust's systems programming goal
+fairly well known that Rust used to have green threads but ripped them out
 
+green threads requiring a runtime conflicted with Rust's systems programming goal
+
+* https://doc.rust-lang.org/std/panic/fn.catch_unwind.html
 * https://doc.rust-lang.org/book/error-handling.html
 * https://doc.rust-lang.org/nomicon/unwinding.html
 * https://doc.rust-lang.org/nomicon/exception-safety.html
@@ -306,13 +315,13 @@ Borrowing rules we just covered statically guarantee at compile time that **no t
 
 For example,
 
-1. Allocate a `Vec`
+1. Allocate a `Vec` owned by the current stack frame
 
-2. Set up 2 threads to write to the `Vec`, each from a closure
+2. Set up 2 threads to write to the `Vec` (each runs a closure)
 
 3. Each thread's closure will borrow* the `Vec`
 
-4. Since each want to muate the `Vec`, we try for an `&mut` reference
+4. Since each thread wants to mutate the `Vec`, they try for an `&mut` reference
 
 5. -> Run afoul of the "1 mutable borrow at a time" rule
 
@@ -396,7 +405,7 @@ The borrow checker will save you!
 
 And if you can't make the borrow checker happy,
 
-then fall back to using locks and message passing.
+then fall back to using message passing and locks.
 
 ---
 
@@ -426,8 +435,6 @@ for _ in 0..10 { // wait for all threads to send their numbers
 See also `burntsushi`'s `chan` and `chan-signal` libraries for multi-producer multi-consumer channels and signal handling.
 
 ???
-
-`move` keyword before the closure's double pipe (`||`) indicates that rather than treat references to variables outside the closure as references, those variables should instead be moved into the closure, such that they're owned by the closure (rather than their original owning context).
 
 As an aside, we could be checking whether or not each thread panics here, but we don't because I have limited space
 
@@ -478,8 +485,6 @@ In most languages it's easy to hold the wrong lock (or not hold a lock when you 
 
 Usually only documentation guards against holding no lock or the wrong lock
 
-so locks get a bad rap, but sometimes you know you need a lock
-
 In Rust, a mutex is conceptually like a container which holds the data that it protects, so it's generic over the type it's protecting
 
 Successfully acquiring the lock gets you a MutexGuard
@@ -524,6 +529,7 @@ let dot_product = vec1.par_iter() // now the same thing again, but in parallel!
     .sum(); // this may also run in parallel
 ```
 
+If the contents of the vectors weren't safe to send to another thread (implemented `Send`), Rust would pick up that mistake!
 
 ???
 
@@ -612,9 +618,19 @@ trait Future {
 }
 ```
 
-* Kind of like green threads (except `Future`s don't have separate stacks) - feels like NodeJS's promises, Scala's futures, etc
+* Kind of like the old green threads (except `Future`s don't have separate stacks) - feels like NodeJS's promises, Scala's futures, etc
 
 ???
+
+only half a year or so old, based on `mio` which was too low level for most people
+
+futures have a successful return type and an error
+
+implementors building futures only need to implement the `poll()` function, and typically you wouldn't be implementing that as a library user
+
+as a user, you can call `wait` to turn an async computation into a sync computation
+
+and has combinators like map so you can queue other computations to happen, etc
 
 https://github.com/alexcrichton/futures-rs
 https://aturon.github.io/blog/2016/08/11/futures/
@@ -680,21 +696,129 @@ enum Async<T> {
 }
 ```
 
-In more detail, futures are turned into "tasks" and run by "executors" (e.g. single thread, thread pool, etc).
+In more detail, futures are turned into "tasks" and run by "executors" (single thread, thread pool, etc); when not running, threads are "parked" via std lib.
 
-Futures are readiness-based (not completion-based/using callbacks as e.g. in Scala); gives free cancellation and backpressure.
+Futures are readiness/pull-based (not completion-based/using callbacks as e.g. in Scala); gives free cancellation and backpressure.
 
 ---
 
 # Sources and Sinks for multiple Futures
 
+A `Source` is to `Future` like `Iterator` is to `Result`.
 
+Or, roughly, "1 future per HTTP response" is not enough; we want an abstraction which can handle multiple future responses:
+
+```rust
+use futures::stream::Stream;
+use tokio_core::reactor::Core;
+use tokio_core::net::TcpListener;
+
+fn main() {
+    let mut core = Core::new().unwrap();
+    let address = "0.0.0.0:12345".parse().unwrap();
+    let listener = TcpListener::bind(&address, &core.handle()).unwrap();
+
+    let connections = listener.incoming();
+    let welcomes = connections.and_then(|(socket, _peer_addr)| {
+        tokio_core::io::write_all(socket, b"Hello, world!\n")
+    });
+    let server = welcomes.for_each(|(_socket, _welcome)| {
+        Ok(())
+    });
+
+    core.run(server).unwrap();
+}
+```
+
+???
+
+Haven't shown `Sink`s but they let you combine multiple streams into one output future or stream
+
+https://tokio.rs/docs/getting-started/streams-and-sinks/
 
 ---
 
-# `Tokio` is `Future`-based infrastructure
+# Tokio provides async programming helpers
 
+We saw `tokio-core` provide a `Core`, which is roughly a more convenient way to run `Future`s. It also provides codec/framing, timeout and TCP/UDP support.
 
+In terms of underlying technologies...
+
+1. epoll/kqueue/whatever-Windows-uses sits at the bottom
+
+2. `mio` crate uses those to provide low level async IO primitives
+
+3. `futures` crate builds on that to provide futures, streams, sinks, etc
+
+4. `tokio-core` adds basic networking support and a nicer executor to `futures`
+
+5. `tokio-proto` and `tokio-service` are yet higher levels of abstraction
+
+???
+
+The name Core comes from reactor core, like nuclear reactor core.
+
+[Reactor is a design pattern](https://en.wikipedia.org/wiki/Reactor_pattern) enabled by an event loop.
+
+Sample from https://docs.rs/tokio-core/0.1.4/tokio_core/
+
+---
+
+# `tokio-proto` and `tokio-service`
+
+`tokio-proto` aims to describe a standard way of implementing network protocols. Provides support for streaming, multiplexing, pipelining, etc.
+
+`tokio-service` aims to provide a type for functions from some *request type* to some *response type*, e.g. HTTP request -> HTTP response:
+
+```rust
+impl Service for HelloWorld {
+    type Request = http::Request;
+    type Response = http::Response;
+    type Error = http::Error;
+    type Future = Box<Future<Item = Self::Response, Error = http::Error>>;
+
+    fn call(&self, req: http::Request) -> Self::Future {
+        // Create the HTTP response
+        let resp = http::Response::ok()
+            .with_body(b"hello world\n");
+
+        // Return the response as an immediate future
+        futures::finished(resp).boxed()
+    }
+}
+```
+
+Idea is that `Service` trait allows building reusable middleware which can be shared between `Service`s easily... but it's too early to tell if that's so.
+
+???
+
+`tokio-proto` examples are too big to fit onto a slide :)
+
+`tokio-service`'s benefits are still mostly hand wavy because most of the effort has been put in lower down the stack.
+
+for example tokio-service hasn't got full documentation on the tokio.rs website yet
+
+Code example https://docs.rs/tokio-service/0.1.0/tokio_service/trait.Service.html
+
+---
+
+# Sample of Tokio-based libs available
+
+* libcurl-based http client
+
+* TLS support
+
+* Signal handling
+
+* Process management, including their std-in/out/err
+
+* inotify for file change notifications
+
+* postgres driver
+
+???
+
+Had a quick look and they mostly seem to be built on tokio-core (the most mature part?)
 
 ---
 

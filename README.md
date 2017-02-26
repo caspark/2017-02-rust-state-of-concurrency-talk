@@ -13,7 +13,7 @@ Covers:
 
 To view, check out https://caspark.github.io/2017-02-rust-state-of-concurrency-talk/  (or clone and open `index.html`).
 
-Doesn't cover RefCell or atomics.
+Doesn't cover Cell/RefCell, atomics or go into detail on types of locks (see [std::sync docs](https://doc.rust-lang.org/std/sync/index.html))
 
 More at [the Rust book and the 'nomicon](https://doc.rust-lang.org/)
 
