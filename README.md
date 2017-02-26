@@ -2,14 +2,12 @@
 
 Covers:
 
-1. Ownership & the Copy trait
-2. Borrowing & the borrow checker
-3. Threads & data race protection
-4. Channels
-6. Locks
-7. Send & Sync traits
-8. Parallel iterators via Rayon
-9. Futures, Streams, Tokio
+1. Refresh the basics
+    * ownership, copying, borrowing
+2. Standard library concurrency
+    * threads, data races, channels, locks, `Send` & `Sync`
+3. Third party concurrency
+    * parallel iterators, futures, streams, tokio
 
 To view, check out https://caspark.github.io/2017-02-rust-state-of-concurrency-talk/  (or clone and open `index.html`).
 
