@@ -101,7 +101,7 @@ I hope to give you an intuitive understanding of Rust's concurrency options
 
 1. Refresh the basics
 
-    * ownership, copying, borrowing
+    * ownership, borrowing
 
 2. Standard library concurrency
 
@@ -125,13 +125,13 @@ I hope to give you an intuitive understanding of Rust's concurrency options
 
 # Ownership
 
-* Each variable (pointing at data) is owned by another variable
+* Each variable (pointing at data) is owned by another variable (or stack frame)
 
-* Each owner is responsible triggers deallocation of owned resources (e.g. memory. file handlers, etc) when its lifetime ends as it goes out of scope
+* Each owner triggers deallocation of owned resources (e.g. memory, file handles, etc) when its lifetime ends as it goes out of scope
 
-* Ownership thus forms a directed acyclic graph rooted in `main()`'s stack
+* Ownership forms a directed acyclic graph rooted in `main()`'s stack frame
 
-* And we can only mutate data via a variable if that variable is the owner
+* We can only mutate data via a variable if that variable is the owner
 
 ???
 
@@ -141,7 +141,7 @@ Need to be on same page to understand what follows
 
 ---
 
-# For example...
+# Ownership example
 
 ```rust
 struct Starscape {
@@ -167,36 +167,9 @@ For example, the `main()` scope owns the `Starscape` via the `universe` let bind
 
 ???
 
-Notice this has very little to do with heap or non-heap allocation
+Notice this has very little to do with stack or heap allocation
 
 e.g. Vec contents are on the heap but doesn't affect ownership thereof
-
----
-
-# Assignment moves unless a type is `Copy`
-
-```rust
-let cat: NyanCat = unimplemented!(); // somehow make a cat
-
-let cat2: NyanCat = cat;
-// can't do anything with cat now
-```
-
-`cat2` now references the memory that `cat2` used to reference, and ownership has moved to `cat2` as well.
-
-Can override move-by-default behaviour by implementing the `Copy` trait for `NyanCat`:
-
-```rust
-#[derive(Copy)]
-struct NyanCat {
-    pos: (i32, i32),
-    volume: u64,
-}
-```
-
-Causes assignment to instead do a bit-by-bit copy of referenced memory, like a faster version of calling `.clone()`.
-
-Can also implement copy directly but it requires unsafe {} if you do that.
 
 ---
 
@@ -204,7 +177,9 @@ Can also implement copy directly but it requires unsafe {} if you do that.
 
 * You can take a reference to memory without taking ownership
 
-* This is called "borrowing":
+&nbsp;
+
+* Called "borrowing" (an "immutable borrow" in this case):
 
 ```rust
 let cat: NyanCat = unimplemented!(); // somehow make a cat
@@ -212,7 +187,9 @@ let cat: NyanCat = unimplemented!(); // somehow make a cat
 let cat2: &NyanCat = &cat;
 ```
 
-* Can also take a "mutable borrow":
+&nbsp;
+
+* We can also take a "mutable borrow":
 
 ```rust
 let mut cat: NyanCat = unimplemented!(); // somehow make a cat
@@ -267,11 +244,9 @@ for i in 0..10 {
 }
 ```
 
-* Errors normally communicated via the `Result` enum...
+Threads can panic; panics are usually detected at thread boundaries (i.e. by code in another thread)
 
-* But threads can panic too, which is usually caught at thread boundaries
-
-    * Can also catch panics within a thread but generally only done for FFI
+Can also catch panics within a thread but generally only done for FFI (use `Result` enum ordinarily)
 
 ???
 
@@ -318,13 +293,11 @@ For example,
 
 1. Allocate a `Vec` owned by the current stack frame
 
-2. Set up 2 threads to write to the `Vec` (each runs a closure)
+2. Set up 2 threads to write to the `Vec` (each runs a closure, as seen earlier)
 
-3. Each thread's closure will borrow* the `Vec`
+3. Each thread's closure will try to mutably borrow* the `Vec`
 
-4. Since each thread wants to mutate the `Vec`, they try for an `&mut` reference
-
-5. -> Run afoul of the "1 mutable borrow at a time" rule
+4. => Run afoul of the "1 mutable borrow at a time" rule (compile time error)
 
 &nbsp;
 
@@ -362,18 +335,29 @@ Sometimes you have data structures that aren't even safe to share across threads
 
 ---
 
+# The `Send` trait
+
 ### Q: Can I send a variable between threads?
 
-A: Only if it implements the **`Send`** trait, which is almost all primitive types and types composed thereof.
+* A: Only if it implements the **`Send`** trait
 
-But, for example, in SDL, the thread that creates the window must be the one that handles the events. The `SdlWindow` struct would not implement `Send`.
+* ... which is almost all primitive types and types composed thereof
+
+* example non-`Send` type: thread that creates an SDL Window must be the thread that polls for events, so an SDL Window can't be passed across threads
+
+---
+
+# The `Sync` trait
 
 ### Q: Can I access a shared variable from another thread?
 
-A: Only if it implements the **`Sync`** trait, which is any type `T` where `&T` is safe to pass between threads without undefined behaviour, which is most types.
+A: Only if it implements the **`Sync`** trait, which is any type `T` where `&T` is `Send` (safe to pass between threads without undefined behaviour)
 
-But, for example, the `Rc` smart pointer (implements reference counting) does not use atomics to count references & so does not implement `Sync`.<br>
-You would use an `Arc` (Atomic Rc) to share a reference count between threads.
+* intuitively, a type is `Sync` if it uses locks and atomics to avoid undefined behaviour or data races
+
+* example non-`Sync` type: the `Rc` smart pointer (which implements reference counting) does not use atomics to count references
+
+    * You would use an `Arc` (Atomic Rc) to share a reference count between threads.
 
 ???
 
@@ -401,16 +385,20 @@ class: center, middle
 .quote[
 So share everything!
 
-The borrow checker will save you!
+The type system will save you!
 ]
 
 And if you can't make the borrow checker happy,
 
-then fall back to using message passing and locks.
+then fall back to using message passing and locks*.
+
+&nbsp;
+
+<sub>(Or use `Cell`/`RefCell` or atomics, which we don't have time to cover)</sub>
 
 ---
 
-# Send messages via channels
+# Message passing via channels
 
 ```rust
 use std::thread;
@@ -433,7 +421,10 @@ for _ in 0..10 { // wait for all threads to send their numbers
 }
 ```
 
-See also `burntsushi`'s `chan` and `chan-signal` libraries for multi-producer multi-consumer channels and signal handling.
+Since channels are not language built-ins, we also have:
+
+* `chan` crate which provides multi-producer multi-consumer channels
+* `chan-signal` for *nix signal handling
 
 ???
 
@@ -496,6 +487,11 @@ But crucially, the resulting T cannot live longer than the MutexGuard (eachg bor
 
 So it's not possible to use the lock incorrectly without getting a compiler error, and it's not possible to access the data without holding the lock.
 
+## Mention
+
+* RwLock
+* Lock poisoning
+
 More:
 * https://blog.rust-lang.org/2015/04/10/Fearless-Concurrency.html
 * http://softwareengineering.stackexchange.com/questions/317873/how-does-rust-diverge-from-the-concurrency-facilities-of-c
@@ -508,9 +504,13 @@ class: center, middle
 
 # What else do we have?
 
+???
+
+Let's dive outside the stdlib
+
 ---
 
-# Optionally parallel iterators via Rayon
+# Optionally parallel iterators via Rayon crate
 
 Regular stdlib lazy iterator (compiles to similar code as a for loop):
 
@@ -549,25 +549,28 @@ Here this is obviously thread safe, but the really cool is that even if you were
 
 ---
 
-# Rayon under the hood
+# Rayon crate under the hood
 
 `.par_iter()` is a high level wrapper around one basic & simple API:
 
 ```rust
 // `do_something` and `do_something_else` *may* run in parallel via work stealing
-// ... but only if there are free CPU cores at work stealing time!
 let (result_a, result_b) = join(|| calc_result_a(), || calc_result_b())
 ```
 
-1. Before `calc_result_a()` starts running, `calc_result_b` will be put onto a queue
+1. Initial thread in pool puts `calc_result_b` onto a queue
 
-2. If another thread is free, it will steal `calc_result_b` and work on it
+2. Initial thread executes `calc_result_a()`
 
-3. If `calc_result_a()` finishes and result b isn't done yet, the same thread will calc result b
+3. If another thread in the pool is not doing work, it will steal and run `calc_result_b()`
 
-&nbsp;
+4. Initial thread finishes `calc_result_a()` and checks the queue for remaining work (e.g. `calc_result_b`), and executes it if need be
 
-**Note:** Do not use for non-CPU bound tasks, like reading from files!
+5. `join()` combines and results all results when the queue is empty
+
+1 year ago, a Rayon-`join`-parallel quick sort saw linear speed up in run time for 1MB arrays & broke even at a 1KB array (may be even better now?)
+
+**Note:** thread pool has 1 thread per core, so do not use for IO bound tasks!
 
 ???
 
@@ -596,7 +599,7 @@ More info:
 
 ---
 
-# Futures for non-CPU bound work
+# Futures crate for non-CPU bound work
 
 * A `Future` (from `futures` crate) is a promise of a value, which may or may not be realised yet
 
@@ -681,6 +684,8 @@ Example stolen from https://tokio.rs/docs/getting-started/futures/
 
 Conceptually, a magical event loop exists under the covers that checks whether the next stage of a future is ready, and runs your code if it is.
 
+In more detail, futures are turned into "tasks" and run by "executors" (single thread, thread pool, etc).
+
 In practice, epoll/kqueue is used via the `mio` crate to allow each `Future` implementation to indicate if it is ready:
 
 ```rust
@@ -697,15 +702,13 @@ enum Async<T> {
 }
 ```
 
-In more detail, futures are turned into "tasks" and run by "executors" (single thread, thread pool, etc); when not running, threads are "parked" via std lib.
-
-Futures are readiness/pull-based (not completion-based/using callbacks as e.g. in Scala); gives free cancellation and backpressure.
+That is, Futures are readiness/pull-based (not completion-based/using callbacks as in e.g. Scala), which gives free cancellation and backpressure.
 
 ---
 
 # Sources and Sinks for multiple Futures
 
-A `Source` is to `Future` like `Iterator` is to `Result`.
+A `Source` (also from `futures` crate) is to `Future` like `Iterator` is to `Result`.
 
 Or, roughly, "1 future per HTTP response" is not enough; we want an abstraction which can handle multiple future responses:
 
@@ -731,6 +734,8 @@ fn main() {
 }
 ```
 
+`Sink`s (not shown) let you combine streams into one output future/stream.
+
 ???
 
 Haven't shown `Sink`s but they let you combine multiple streams into one output future or stream
@@ -741,7 +746,7 @@ https://tokio.rs/docs/getting-started/streams-and-sinks/
 
 # Tokio provides async programming helpers
 
-We saw `tokio-core` provide a `Core`, which is roughly a more convenient way to run `Future`s. It also provides codec/framing, timeout and TCP/UDP support.
+We just saw `tokio-core` provide a `Core`, which is a better way to run `Future`s (a better Executor) and TCP support. It also provides codec/framing, timeout and UDP support.
 
 In terms of underlying technologies...
 
@@ -753,7 +758,7 @@ In terms of underlying technologies...
 
 4. `tokio-core` adds basic networking support and a nicer executor to `futures`
 
-5. `tokio-proto` and `tokio-service` are yet higher levels of abstraction
+5. `tokio-proto` and `tokio-service` are higher levels of abstraction...
 
 ???
 
@@ -803,9 +808,12 @@ Code example https://docs.rs/tokio-service/0.1.0/tokio_service/trait.Service.htm
 
 ---
 
-# Sample of Tokio-based libs available
+# Some available Tokio-based libraries
 
-* libcurl-based http client
+From https://tokio.rs/docs/going-deeper/third-party/:
+
+
+* HTTP client based on libcurl
 
 * TLS support
 
@@ -813,9 +821,17 @@ Code example https://docs.rs/tokio-service/0.1.0/tokio_service/trait.Service.htm
 
 * Process management, including their std-in/out/err
 
-* inotify for file change notifications
+* File change notifications via inotify
 
-* postgres driver
+* Async postgres driver
+
+&nbsp;
+
+It's early days still:
+
+* Tokio is not 1.0 yet and its API is unstable
+
+* Hard to return `Future`s from functions without the `impl Trait` language feature being stablised (just like returning `Iterator`s is hard)
 
 ???
 
@@ -823,11 +839,58 @@ Had a quick look and they mostly seem to be built on tokio-core (the most mature
 
 ---
 
-class: center, middle
+<!--class: middle-->
 
+.center.middle[
 ## thanks!
 
 # Questions?
+]
+
+&nbsp;
+
+See also:
+
+* Copy trait - types that are Copy never need to be moved (ownership wise)
+* Cell/RefCell - move no-simultaneous mutation constraints to runtime
+* Rc/Arc - reference counting useful to bypassing borrow checker
+* Atomics - compare and set safely across threads
+
+---
+
+class: center, middle
+
+# Cut/backup
+
+---
+
+# Assignment moves unless a type is `Copy`
+
+```rust
+let cat: NyanCat = unimplemented!(); // somehow make a cat
+
+let cat2: NyanCat = cat;
+// can't do anything with cat now, & cat's data is owned by cat2
+```
+
+&nbsp;
+
+Can override move-by-default behaviour by implementing the `Copy` trait for `NyanCat`:
+
+```rust
+#[derive(Copy)]
+struct NyanCat {
+    pos: (i32, i32),
+    volume: u64,
+}
+```
+
+Causes assignment to instead do a bit-by-bit copy of referenced memory, like a faster version of calling `.clone()`.
+
+<sub>(You can implement `Copy` directly but it requires `unsafe {}` if you do that.)</sub>
+
+---
+
     </textarea>
   </body>
 </html>

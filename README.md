@@ -3,7 +3,7 @@
 Covers:
 
 1. Refresh the basics
-    * ownership, copying, borrowing
+    * ownership, borrowing
 2. Standard library concurrency
     * threads, data races, channels, locks, `Send` & `Sync`
 3. Third party concurrency
@@ -11,7 +11,7 @@ Covers:
 
 To view, check out https://caspark.github.io/2017-02-rust-state-of-concurrency-talk/  (or clone and open `index.html`).
 
-Doesn't cover Cell/RefCell, atomics or go into detail on types of locks (see [std::sync docs](https://doc.rust-lang.org/std/sync/index.html))
+Doesn't cover Copy trait, Cell/RefCell, atomics or go into detail on types of locks (see [std::sync docs](https://doc.rust-lang.org/std/sync/index.html))
 
 More at [the Rust book and the 'nomicon](https://doc.rust-lang.org/)
 
